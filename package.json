@@ -1,0 +1,23 @@
+{
+  "name": "it-slack-bot",
+  "version": "1.0.0",
+  "description": "IT escalation bot for #it-internal — auto-reminds responders at 5, 10, 15 minutes",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "worker": "node src/worker.js"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.17.1",
+    "bullmq": "^5.4.2",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.3.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
