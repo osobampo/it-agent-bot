@@ -1,19 +1,21 @@
 // src/handlers/message.js
+// Handles the `message` event from Slack for monitored channels.
+// Schedules escalation reminders for all messages that pass the guard checks.
+
 const config = require("../../config");
 const { scheduleEscalations } = require("../jobs/scheduleEscalations");
 const { getBotUserId } = require("../utils/slack");
-const { isItRequest } = require("../utils/gemini");
 
 function registerMessageHandler(app) {
   app.message(async ({ message, client, logger }) => {
     try {
-      // ── Guard: only process messages in monitored channels ───────────────
+      // ── Guard: only process messages in monitored channels ──────────────
       if (!config.channel.itChannelIds.includes(message.channel)) return;
 
-      // ── Guard: ignore thread replies ─────────────────────────────────────
+      // ── Guard: ignore thread replies — only track top-level messages ────
       if (message.thread_ts && message.thread_ts !== message.ts) return;
 
-      // ── Guard: ignore subtypes ───────────────────────────────────────────
+      // ── Guard: ignore subtypes (edits, joins, etc.) ─────────────────────
       if (message.subtype) return;
 
       // ── Guard: ignore bot messages ───────────────────────────────────────
@@ -27,18 +29,11 @@ function registerMessageHandler(app) {
         return;
       }
 
-      // ── AI Classification ────────────────────────────────────────────────
-      const messageText = message.text || "";
-      logger.info(`[Handler] Classifying message from ${message.user}: "${messageText.slice(0, 80)}..."`);
+      // ── All checks passed: begin tracking this message ───────────────────
+      logger.info(
+        `[Handler] IT request from ${message.user} at ${message.ts}. Scheduling escalations.`
+      );
 
-      const needsAttention = await isItRequest(messageText);
-      if (!needsAttention) {
-        logger.info(`[Handler] Gemini classified message as non-request — skipping.`);
-        return;
-      }
-
-      // ── Schedule escalations ─────────────────────────────────────────────
-      logger.info(`[Handler] IT request confirmed from ${message.user} at ${message.ts}. Scheduling escalations.`);
       await scheduleEscalations(message.channel, message.ts, message.user);
 
     } catch (err) {

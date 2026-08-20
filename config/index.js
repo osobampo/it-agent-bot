@@ -19,6 +19,8 @@ module.exports = {
   channel: {
     // Comma-separated channel IDs — all will be monitored
     itChannelIds: required("IT_CHANNEL_IDS").split(",").map(id => id.trim()),
+    // Channel to forward unresolved messages to on steps 2 and 3
+    escalationChannelId: required("ESCALATION_CHANNEL_ID"),
   },
 
   responders: {
