@@ -1,25 +1,19 @@
 // src/handlers/message.js
-// Handles the `message` event from Slack for the #it-internal channel.
-// Schedules escalation reminders for all messages that pass the guard checks.
-
 const config = require("../../config");
 const { scheduleEscalations } = require("../jobs/scheduleEscalations");
 const { getBotUserId } = require("../utils/slack");
+const { isItRequest } = require("../utils/gemini");
 
-/**
- * Register the message handler on the Bolt app.
- * @param {import('@slack/bolt').App} app
- */
 function registerMessageHandler(app) {
   app.message(async ({ message, client, logger }) => {
     try {
-      // ── Guard: only process messages in monitored channels ──────────────
+      // ── Guard: only process messages in monitored channels ───────────────
       if (!config.channel.itChannelIds.includes(message.channel)) return;
 
-      // ── Guard: ignore thread replies — only track top-level messages ────
+      // ── Guard: ignore thread replies ─────────────────────────────────────
       if (message.thread_ts && message.thread_ts !== message.ts) return;
 
-      // ── Guard: ignore subtypes (edits, joins, etc.) ─────────────────────
+      // ── Guard: ignore subtypes ───────────────────────────────────────────
       if (message.subtype) return;
 
       // ── Guard: ignore bot messages ───────────────────────────────────────
@@ -27,22 +21,26 @@ function registerMessageHandler(app) {
       if (message.user === botUserId) return;
       if (message.bot_id) return;
 
-      // ── Guard: ignore messages from the designated IT responders ─────────
+      // ── Guard: ignore messages from any IT responder ─────────────────────
       if (config.responders.ids.includes(message.user)) {
         logger.info(`[Handler] Skipping IT staff message from ${message.user}`);
         return;
       }
 
-      // ── All checks passed: begin tracking this message ───────────────────
-      logger.info(
-        `[Handler] IT request from ${message.user} at ${message.ts}. Scheduling escalations.`
-      );
+      // ── AI Classification ────────────────────────────────────────────────
+      const messageText = message.text || "";
+      logger.info(`[Handler] Classifying message from ${message.user}: "${messageText.slice(0, 80)}..."`);
 
-      await scheduleEscalations(
-        message.channel,
-        message.ts,
-        message.user
-      );
+      const needsAttention = await isItRequest(messageText);
+      if (!needsAttention) {
+        logger.info(`[Handler] Gemini classified message as non-request — skipping.`);
+        return;
+      }
+
+      // ── Schedule escalations ─────────────────────────────────────────────
+      logger.info(`[Handler] IT request confirmed from ${message.user} at ${message.ts}. Scheduling escalations.`);
+      await scheduleEscalations(message.channel, message.ts, message.user);
+
     } catch (err) {
       logger.error("[Handler] Error processing message event:", err);
     }
